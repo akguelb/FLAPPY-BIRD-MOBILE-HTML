@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Flappy Bird iOS</title>
+<style>
+html,body {
+  margin:0; padding:0; height:100%; width:100%;
+  background:#87CEEB; overflow:hidden;
+  touch-action:none; -webkit-user-select:none; -webkit-touch-callout:none;
+}
+canvas {
+  display:block; margin:0 auto; background:linear-gradient(#bfe9ff,#87d3ff);
+}
+#menu, #retry {
+  position:absolute;top:0;left:0;width:100%;height:100%;
+  display:flex;flex-direction:column;justify-content:center;align-items:center;
+  background:rgba(0,0,0,0.4);z-index:10;
+  font-family:sans-serif;text-align:center;
+}
+#menu h1, #retry h2 {color:#FFD700;text-shadow:2px 2px 4px #000;margin-bottom:20px;}
+button {
+  font-size:22px;padding:12px 25px;border:none;border-radius:10px;
+  background:#E42B2B;color:white;
+}
+#hud {
+  position:absolute;top:10px;left:50%;transform:translateX(-50%);
+  background:rgba(255,255,255,0.7);
+  padding:6px 14px;border-radius:10px;font-size:18px;
+  display:none;
+}
+</style>
+</head>
+<body>
+
+<div id="menu">
+  <h1>FLAPPY BIRD</h1>
+  <button id="startBtn">Başla</button>
+</div>
+
+<div id="retry" style="display:none;">
+  <h2 id="retryText"></h2>
+  <button id="retryBtn">Tekrar Dene</button>
+</div>
+
+<div id="hud">Skor: <span id="score">0</span> | Rekor: <span id="best">0</span></div>
+
+<canvas id="game"></canvas>
+
+<script>
+const cvs = document.getElementById("game");
+const ctx = cvs.getContext("2d");
+
+function resizeCanvas() {
+  cvs.width = window.innerWidth;
+  cvs.height = window.innerHeight;
+}
+resizeCanvas();
+window.addEventListener("resize", resizeCanvas);
+
+let width = cvs.width;
+let height = cvs.height;
+
+let gravity = 0.18, jump = -4, pipeGap = 170, pipeSpeed = 1.2;
+let bird = {x: width*0.25, y: height/2, vy: 0, r: 18};
+let pipes = [], score = 0, running = false;
+let confetti = [];
+
+const menu = document.getElementById("menu");
+const retry = document.getElementById("retry");
+const retryText = document.getElementById("retryText");
+const startBtn = document.getElementById("startBtn");
+const retryBtn = document.getElementById("retryBtn");
+const hud = document.getElementById("hud");
+const scoreEl = document.getElementById("score");
+const bestEl = document.getElementById("best");
+
+let best = 0;
+try { best = parseInt(localStorage.getItem("bestScore")) || 0; } catch(e) {}
+bestEl.textContent = best;
+
+function spawnPipe() {
+  const top = Math.random() * (height/2) + 80;
+  pipes.push({x: width, top});
+}
+
+function draw() {
+  ctx.clearRect(0,0,width,height);
+  const g = ctx.createLinearGradient(0,0,0,height);
+  g.addColorStop(0,"#bfe9ff"); g.addColorStop(1,"#87d3ff");
+  ctx.fillStyle=g; ctx.fillRect(0,0,width,height);
+
+  ctx.fillStyle="#001f3f";
+  pipes.forEach(p=>{
+    ctx.fillRect(p.x,0,60,p.top);
+    ctx.fillRect(p.x,p.top+pipeGap,60,height);
+  });
+
+  ctx.beginPath();
+  ctx.arc(bird.x,bird.y,bird.r,0,Math.PI*2);
+  ctx.fillStyle="#FFD400"; ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(bird.x+bird.r,bird.y);
+  ctx.lineTo(bird.x+bird.r+10,bird.y-5);
+  ctx.lineTo(bird.x+bird.r+10,bird.y+5);
+  ctx.fillStyle="#E42B2B"; ctx.fill();
+
+  confetti.forEach(c=>{
+    ctx.beginPath();
+    ctx.arc(c.x,c.y,c.r,0,Math.PI*2);
+    ctx.fillStyle=c.color; ctx.fill();
+    c.y+=c.speed;
+  });
+  confetti=confetti.filter(c=>c.y<height);
+}
+
+function update() {
+  bird.vy+=gravity;
+  bird.y+=bird.vy;
+  pipes.forEach(p=>p.x-=pipeSpeed);
+  if(pipes.length && pipes[0].x<-60)pipes.shift();
+  if(pipes.length && pipes[pipes.length-1].x<width-220)spawnPipe();
+
+  pipes.forEach(p=>{
+    if(bird.x+bird.r>p.x && bird.x-bird.r<p.x+60){
+      if(bird.y-bird.r<p.top || bird.y+bird.r>p.top+pipeGap){ endGame(); }
+    }
+  });
+  if(bird.y+bird.r>height) endGame();
+
+  pipes.forEach(p=>{
+    if(!p.passed && p.x+60<bird.x){ p.passed=true; score++; scoreEl.textContent=score; }
+  });
+}
+
+function createConfetti() {
+  for(let i=0;i<100;i++){
+    confetti.push({
+      x:Math.random()*width, y:-10,
+      r:Math.random()*4+2,
+      color:`hsl(${Math.random()*360},100%,50%)`,
+      speed:Math.random()*2+1
+    });
+  }
+}
+
+function loop() {
+  if(!running) return;
+  update();
+  draw();
+  window.requestAnimationFrame(loop);
+}
+
+function startGame(){
+  bird.y = height/2;
+  bird.vy = 0;
+  pipes = [];
+  score = 0;
+  confetti = [];
+  scoreEl.textContent = 0;
+  hud.style.display="block";
+  menu.style.display="none";
+  retry.style.display="none";
+  running = true;
+  spawnPipe();
+  window.requestAnimationFrame(loop);
+}
+
+function endGame(){
+  running = false;
+  hud.style.display="none";
+  if(score>best){
+    best = score;
+    try { localStorage.setItem("bestScore",best); } catch(e){}
+    bestEl.textContent = best;
+    retryText.textContent="🏆 Tebrikler! Yeni Rekor! 🏆";
+    createConfetti();
+  } else retryText.textContent="💥 Tekrar Deneyiniz 💥";
+  retry.style.display="flex";
+}
+
+function flap(){
+  if(!running) return;
+  bird.vy = jump;
+}
+
+startBtn.addEventListener("click", startGame);
+retryBtn.addEventListener("click", startGame);
+document.addEventListener("touchstart", flap, {passive:false});
+document.addEventListener("mousedown", flap);
+document.addEventListener("keydown", e => { if(e.code==="Space") flap(); });
+</script>
+</body>
+</html>
